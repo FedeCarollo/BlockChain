@@ -16,7 +16,7 @@ export class Block{
         this.timestamp = timestamp;
         this.data = data;
         this.prevHash = "";     //Will be updated by BlockChain class, because until we want it to be mined
-        this.nonce = -1;        //starts from 0 in mine
+        this.nonce = 0;        //starts from 0 in mine
         this.hash = this.getHash();
   
     }
@@ -34,11 +34,10 @@ export class Block{
 
         const toMatch = Array(difficulty).join("0")
         
-        do{
+        while(!this.hash.startsWith(toMatch)){
             this.nonce++;
             this.hash = this.getHash()
-        } while(!this.hash.startsWith(toMatch))
-
+        }
     }
 }
 
