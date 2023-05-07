@@ -1,4 +1,6 @@
 import * as crypto from "crypto"
+import { BlockChain, MINT_KEY_PAIR } from "./Blockchain";
+import { Transaction } from "./Transaction";
 
 const SHA256 = (message: string | any) => {
     return crypto.createHash("sha256").update(message).digest("hex")
@@ -39,5 +41,25 @@ export class Block{
             this.hash = this.getHash()
         }
     }
+
+    hasValidTransactions(chain: BlockChain) : boolean {
+        let gas = 0, reward = 0;
+
+        this.data.forEach((transaction: Transaction) => {
+            if(transaction.from !== MINT_KEY_PAIR.getPublic("hex")){
+                gas += transaction.gas
+            } else {
+                reward = transaction.amount
+            }
+        })
+
+
+        return (
+            reward - gas === chain.reward &&    //Non si possono aggiungere reward diversi da quelli stabiliti
+            this.data.every((transaction: Transaction) => Transaction.isValid(transaction, chain)) &&
+            this.data.filter((transaction: Transaction) => transaction.from == MINT_KEY_PAIR.getPublic("hex")).length === 1
+            )
+    }
+
 }
 

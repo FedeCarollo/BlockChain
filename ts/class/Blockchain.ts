@@ -1,4 +1,17 @@
 import { Block } from "./Block"
+import { Transaction } from "./Transaction";
+import { ec } from 'elliptic';
+
+
+//TODO move away
+const enc = new ec("secp256k1")
+
+export const MINT_KEY_PAIR = enc.genKeyPair()
+const MINT_PUBLIC_ADDRESS = MINT_KEY_PAIR.getPublic("hex")
+
+//TODO modify
+export const firstHolder = enc.genKeyPair()
+
 
 export class BlockChain {
 
@@ -6,24 +19,40 @@ export class BlockChain {
     difficulty: number;
     blocksPerEpoch: number = 2016;
 
+    transactions: Transaction[]     //pending transactions
+    reward: number;
+
+
+
     //constructor makes the first block
     constructor(){
-        this.chain = [new Block(Date.now().toString())]   
+        const initialCoinRelease = new Transaction(MINT_PUBLIC_ADDRESS, firstHolder.getPublic("hex"), 10000)
+
+        this.chain = [new Block(Date.now().toString(), [initialCoinRelease])]   
         this.difficulty = 1
+        this.transactions = []
+        this.reward = 300;
     }
 
 
     addBlock(block: Block) : void {
         block.prevHash = this.getLastBlock().hash   //linking the chain
         block.hash = block.getHash()
-        block.mine(this.difficulty)
 
-        //Freeze makes object immutable
-        this.chain.push(Object.freeze(block))
+        if(block.hasValidTransactions(this)){
+            block.mine(this.difficulty)
 
-        //Bitcoin difficulty update
-        if(this.chain.length % this.blocksPerEpoch)
-            this.updateDifficulty()
+            //Freeze makes object immutable
+            this.chain.push(Object.freeze(block))
+    
+            //Bitcoin difficulty update
+            if(this.chain.length % this.blocksPerEpoch == 0)
+                this.updateDifficulty()
+        } else {
+            throw new Error("Transactions not valid")
+        }
+
+
     }
 
     getLastBlock() : Block {
@@ -36,7 +65,8 @@ export class BlockChain {
             const current = this.chain[i];
             const prev = this.chain[i-1];
 
-            if(current.hash != current.getHash() || prev.hash != current.prevHash)
+            if(current.hash != current.getHash() || prev.hash != current.prevHash ||
+               !current.hasValidTransactions(blockchain))
                 return false;
         }
         return true;
@@ -66,4 +96,45 @@ export class BlockChain {
         }
 
     }
+
+
+    addTransaction(transaction: Transaction) : void{
+        if(Transaction.isValid(transaction, this))
+            this.transactions.push(transaction);
+    }
+
+    mineTransactions(minerAddress: string) {
+        let gas = 0
+
+        this.transactions.forEach(tx => {gas += tx.gas})
+        //TODO every block can mine only a specified amount of transactions in one block
+        const rewardTransaction = new Transaction(MINT_PUBLIC_ADDRESS, minerAddress, this.reward + gas)
+
+        rewardTransaction.sign(MINT_KEY_PAIR)
+
+        if(this.transactions.length != 0){
+            this.addBlock(new Block(Date.now().toString(), [rewardTransaction, ...this.transactions]))
+            this.transactions = []
+        }
+
+    }
+
+    getBalance(address: string) {
+        let balance = 0;
+
+        this.chain.forEach((block : Block) => {
+            block.data.forEach((transaction : Transaction) => {
+                if(transaction.from === address){
+                    balance -= transaction.amount
+                    balance -= transaction.gas
+                }
+                else if (transaction.to === address){
+                    balance += transaction.amount;
+                }
+            })
+        })
+        return balance
+    }
+
+
 }
